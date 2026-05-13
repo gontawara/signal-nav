@@ -13,5 +13,8 @@ wheels/
 data/
 *.pkl
 
+# OSMnx cache
+cache/
+
 # Environment
 .env
