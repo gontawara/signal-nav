@@ -908,6 +908,7 @@ dependencies = [
     { name = "networkx" },
     { name = "osmnx" },
     { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "uvicorn" },
 ]
 
@@ -924,6 +925,7 @@ requires-dist = [
     { name = "networkx", specifier = ">=3.0" },
     { name = "osmnx", specifier = ">=2.0.0" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
+    { name = "scipy", specifier = ">=1.14.0" },
     { name = "uvicorn", specifier = ">=0.34.0" },
 ]
 

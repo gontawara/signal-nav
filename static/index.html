@@ -210,7 +210,7 @@
             <span>信号最小ルート</span>
         </div>
         <div class="legend-item">
-            <div class="legend-dot" style="background: #f59e0b;"></div>
+            <div class="legend-dot" style="background: #ffffff; border: 2px solid #333333;"></div>
             <span>信号機</span>
         </div>
     </div>
@@ -333,6 +333,26 @@
             document.getElementById('m-dist').textContent = (data.min_signal.distance_m / 1000).toFixed(2);
             document.getElementById('m-time').textContent = (data.min_signal.time_s / 60).toFixed(1);
             document.getElementById('m-signals').textContent = data.min_signal.signal_count;
+
+            // ルート上の信号マーカーを表示（両ルートの信号を重複除去して表示）
+            const signalSet = new Set();
+            const allSignals = [
+                ...data.shortest.signal_positions,
+                ...data.min_signal.signal_positions,
+            ];
+            for (const pos of allSignals) {
+                const key = `${pos[0].toFixed(6)},${pos[1].toFixed(6)}`;
+                if (signalSet.has(key)) continue;
+                signalSet.add(key);
+                const marker = L.circleMarker(pos, {
+                    radius: 5,
+                    color: '#333333',
+                    fillColor: '#ffffff',
+                    fillOpacity: 1,
+                    weight: 2,
+                }).addTo(map);
+                routeLayers.push(marker);
+            }
 
             // 比較テキスト
             const distDiff = (data.min_signal.distance_m - data.shortest.distance_m) / 1000;
