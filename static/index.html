@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal Nav - 信号最小化ナビ</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+        #map { width: 100%; height: 100vh; }
+
+        /* 操作パネル */
+        #panel {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            width: 320px;
+            font-size: 14px;
+        }
+        #panel h2 {
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        .point-display {
+            margin-bottom: 8px;
+            padding: 8px;
+            background: #f5f5f5;
+            border-radius: 4px;
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+        }
+        .point-label {
+            font-weight: bold;
+            margin-right: 8px;
+            white-space: nowrap;
+        }
+        .point-coords {
+            color: #666;
+            font-size: 12px;
+        }
+        .instructions {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 12px;
+        }
+        #calc-btn {
+            width: 100%;
+            padding: 10px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        #calc-btn:hover { background: #1d4ed8; }
+        #calc-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #reset-btn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 8px;
+            background: white;
+            color: #666;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        #reset-btn:hover { background: #f5f5f5; }
+
+        /* 結果表示 */
+        #results {
+            margin-top: 12px;
+            display: none;
+        }
+        .route-card {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+        .route-card.shortest {
+            border-left: 4px solid #2563eb;
+            background: #eff6ff;
+        }
+        .route-card.min-signal {
+            border-left: 4px solid #dc2626;
+            background: #fef2f2;
+        }
+        .route-card .label {
+            font-weight: bold;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+        .route-card .stats {
+            font-size: 12px;
+            color: #555;
+            line-height: 1.6;
+        }
+        .comparison {
+            padding: 8px;
+            background: #f0fdf4;
+            border-radius: 6px;
+            font-size: 12px;
+            color: #166534;
+        }
+
+        /* ローディング */
+        #loading {
+            display: none;
+            text-align: center;
+            padding: 16px;
+            color: #666;
+        }
+
+        /* 凡例 */
+        #legend {
+            position: fixed;
+            bottom: 20px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px 14px;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+        .legend-item:last-child { margin-bottom: 0; }
+        .legend-line {
+            width: 24px;
+            height: 3px;
+            margin-right: 8px;
+            border-radius: 2px;
+        }
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            margin-left: 7px;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+
+    <div id="panel">
+        <h2>Signal Nav</h2>
+        <p class="instructions">地図をクリックして出発地と目的地を指定</p>
+
+        <div class="point-display">
+            <span class="point-label" style="color: #16a34a;">出発地:</span>
+            <span id="origin-text" class="point-coords">未選択</span>
+        </div>
+        <div class="point-display">
+            <span class="point-label" style="color: #dc2626;">目的地:</span>
+            <span id="dest-text" class="point-coords">未選択</span>
+        </div>
+
+        <button id="calc-btn" disabled>ルートを計算</button>
+        <button id="reset-btn">リセット</button>
+
+        <div id="loading">計算中...</div>
+
+        <div id="results">
+            <div class="route-card shortest">
+                <div class="label" style="color: #2563eb;">最短時間ルート</div>
+                <div class="stats">
+                    距離: <span id="s-dist"></span> km /
+                    時間: <span id="s-time"></span> 分 /
+                    信号: <span id="s-signals"></span> 回
+                </div>
+            </div>
+            <div class="route-card min-signal">
+                <div class="label" style="color: #dc2626;">信号最小ルート</div>
+                <div class="stats">
+                    距離: <span id="m-dist"></span> km /
+                    時間: <span id="m-time"></span> 分 /
+                    信号: <span id="m-signals"></span> 回
+                </div>
+            </div>
+            <div class="comparison">
+                <span id="comparison-text"></span>
+            </div>
+        </div>
+    </div>
+
+    <div id="legend">
+        <div class="legend-item">
+            <div class="legend-line" style="background: #2563eb;"></div>
+            <span>最短時間ルート</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-line" style="background: #dc2626;"></div>
+            <span>信号最小ルート</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #f59e0b;"></div>
+            <span>信号機</span>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // --- 地図の初期化 ---
+        const map = L.map('map').setView([33.58, 130.25], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 19,
+        }).addTo(map);
+
+        // --- 状態管理 ---
+        let origin = null;      // {lat, lng}
+        let destination = null;  // {lat, lng}
+        let originMarker = null;
+        let destMarker = null;
+        let routeLayers = [];    // ルートのポリラインやマーカー
+
+        const calcBtn = document.getElementById('calc-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const originText = document.getElementById('origin-text');
+        const destText = document.getElementById('dest-text');
+        const resultsDiv = document.getElementById('results');
+        const loadingDiv = document.getElementById('loading');
+
+        // --- 地図クリックで起点/終点を設定 ---
+        map.on('click', function(e) {
+            const {lat, lng} = e.latlng;
+
+            if (!origin) {
+                // 1回目のクリック: 出発地
+                origin = {lat, lng};
+                originMarker = L.marker([lat, lng], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: '<div style="background:#16a34a;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7],
+                    })
+                }).addTo(map);
+                originText.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            } else if (!destination) {
+                // 2回目のクリック: 目的地
+                destination = {lat, lng};
+                destMarker = L.marker([lat, lng], {
+                    icon: L.divIcon({
+                        className: '',
+                        html: '<div style="background:#dc2626;width:14px;height:14px;border-radius:50%;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>',
+                        iconSize: [14, 14],
+                        iconAnchor: [7, 7],
+                    })
+                }).addTo(map);
+                destText.textContent = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                calcBtn.disabled = false;
+            }
+        });
+
+        // --- ルート計算 ---
+        calcBtn.addEventListener('click', async () => {
+            if (!origin || !destination) return;
+
+            calcBtn.disabled = true;
+            loadingDiv.style.display = 'block';
+            resultsDiv.style.display = 'none';
+            clearRoutes();
+
+            try {
+                const res = await fetch('/api/route', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        origin_lat: origin.lat,
+                        origin_lng: origin.lng,
+                        dest_lat: destination.lat,
+                        dest_lng: destination.lng,
+                    }),
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert(`エラー: ${err.detail || res.statusText}`);
+                    return;
+                }
+
+                const data = await res.json();
+                displayRoutes(data);
+            } catch (e) {
+                alert(`通信エラー: ${e.message}`);
+            } finally {
+                loadingDiv.style.display = 'none';
+                calcBtn.disabled = false;
+            }
+        });
+
+        // --- ルート表示 ---
+        function displayRoutes(data) {
+            // 最短時間ルート（青）
+            const shortestLine = L.polyline(data.shortest.coordinates, {
+                color: '#2563eb', weight: 5, opacity: 0.7
+            }).addTo(map);
+            routeLayers.push(shortestLine);
+
+            // 信号最小ルート（赤）
+            const minSignalLine = L.polyline(data.min_signal.coordinates, {
+                color: '#dc2626', weight: 5, opacity: 0.7
+            }).addTo(map);
+            routeLayers.push(minSignalLine);
+
+            // 両ルートが見えるようにズーム調整
+            const allCoords = [...data.shortest.coordinates, ...data.min_signal.coordinates];
+            map.fitBounds(L.latLngBounds(allCoords).pad(0.1));
+
+            // 統計情報の表示
+            document.getElementById('s-dist').textContent = (data.shortest.distance_m / 1000).toFixed(2);
+            document.getElementById('s-time').textContent = (data.shortest.time_s / 60).toFixed(1);
+            document.getElementById('s-signals').textContent = data.shortest.signal_count;
+
+            document.getElementById('m-dist').textContent = (data.min_signal.distance_m / 1000).toFixed(2);
+            document.getElementById('m-time').textContent = (data.min_signal.time_s / 60).toFixed(1);
+            document.getElementById('m-signals').textContent = data.min_signal.signal_count;
+
+            // 比較テキスト
+            const distDiff = (data.min_signal.distance_m - data.shortest.distance_m) / 1000;
+            const signalDiff = data.shortest.signal_count - data.min_signal.signal_count;
+            document.getElementById('comparison-text').textContent =
+                `信号最小ルートは ${distDiff > 0 ? '+' : ''}${distDiff.toFixed(2)} km で信号 ${signalDiff} 回削減`;
+
+            resultsDiv.style.display = 'block';
+        }
+
+        // --- リセット ---
+        resetBtn.addEventListener('click', () => {
+            origin = null;
+            destination = null;
+            if (originMarker) { map.removeLayer(originMarker); originMarker = null; }
+            if (destMarker) { map.removeLayer(destMarker); destMarker = null; }
+            clearRoutes();
+            originText.textContent = '未選択';
+            destText.textContent = '未選択';
+            calcBtn.disabled = true;
+            resultsDiv.style.display = 'none';
+        });
+
+        function clearRoutes() {
+            routeLayers.forEach(l => map.removeLayer(l));
+            routeLayers = [];
+        }
+    </script>
+</body>
+</html>
